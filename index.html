@@ -377,7 +377,52 @@ function openExpenseEdit(existing){openForm('expense',existing)}
 
 function renderIncome(){const rows=[...data.income].sort((a,b)=>(b.received_on||"").localeCompare(a.received_on||"")).map(x=>`<tr><td><b>${esc(x.source)}</b></td><td>${money(x.amount)}</td><td>${dateFmt(x.received_on)}</td><td>${esc(x.remarks||"-")}</td><td>${actionBtns("income",x.id)}</td></tr>`);$("incomeTable").innerHTML=table(["Source","Amount","Received","Remarks",""],rows)}
 function renderCards(){
- $("cardsGrid").innerHTML=data.cards.length?data.cards.map(c=>{const limit=Number(c.credit_limit||0),used=Number(c.outstanding||0),pct=limit?Math.min(100,used/limit*100):0;return `<div class="card"><div class="row"><div><h3 style="margin:0">${esc(c.card_name)}</h3><div class="muted">${esc(c.bank_name||"")} ${c.card_number_last4?"•••• "+esc(c.card_number_last4):""}</div></div>${actionBtns("credit_cards",c.id)}</div><div style="height:18px"></div><div class="row"><div><div class="metric-label">Outstanding</div><div class="metric">${money(used)}</div></div><div style="text-align:right"><div class="metric-label">Limit</div><b>${money(limit)}</b></div></div><div style="height:10px"></div><div class="progress"><i style="width:${pct}%"></i></div><div class="row" style="margin-top:7px"><span class="muted">${pct.toFixed(0)}% used</span><span class="muted">Due ${dateFmt(c.due_date)}</span></div></div>`}).join(""):`<div class="card" style="grid-column:1/-1"><div class="empty">No credit cards yet. Add your first card.</div></div>`;
+ $("cardsGrid").innerHTML=data.cards.length?data.cards.map(c=>{const limit=Number(c.credit_limit||0),used=Number(c.outstanding||0),pct=limit?Math.min(100,used/limit*100):0;return `<div class="card"><div class="row"><div><h3 style="margin:0">${esc(c.card_name)}</h3><div class="muted">${esc(c.bank_name||"")} ${c.card_number_last4?"•••• "+esc(c.card_number_last4):""}</div></div>${actionBtns("credit_cards",c.id)}</div><div style="height:18px"></div><div class="row"><div><div class="metric-label">Outstanding</div><div class="metric">${money(used)}</div></div><div style="text-align:right"><div class="metric-label">Limit</div><b>${money(limit)}</b></div></div><div style="height:10px"></div><div class="progress"><i style="width:${pct}%"></i></div><div class="row" style="margin-top:7px"><span class="muted">${pct.toFixed(0)}% used</span><span class="muted">Due ${dateFmt(c.due_date)}</span></div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn small" onclick="openCardPayment('${esc(c.id)}')">₹ Record Payment</button><button class="btn secondary small" onclick="viewCardPayments('${esc(c.id)}')">Payment History</button></div></div>`}).join(""):`<div class="card" style="grid-column:1/-1"><div class="empty">No credit cards yet. Add your first card.</div></div>`;
+}
+window.openCardPayment=function(id){
+ const c=data.cards.find(x=>String(x.id)===String(id));if(!c)return;
+ const body=`<div class="formgrid">
+ <div><label>Credit card</label><input value="${esc(c.card_name)}${c.card_number_last4?" •••• "+esc(c.card_number_last4):""}" disabled></div>
+ <div><label>Current outstanding</label><input value="${money(c.outstanding)}" disabled></div>
+ <div><label>Payment amount</label><input id="cardPayAmount" type="number" min="1" max="${Math.max(0,Number(c.outstanding||0))}" step="0.01" required placeholder="Enter amount"></div>
+ <div><label>Payment date</label><input id="cardPayDate" type="date" value="${isoToday()}" required></div>
+ <div><label>Payment method</label><select id="cardPayMethod"><option>UPI</option><option>Bank transfer</option><option>Auto-debit</option><option>Cash</option><option>Other</option></select></div>
+ <div><label>Transaction reference (optional)</label><input id="cardPayRef" placeholder="UPI / bank reference"></div>
+ </div><p class="muted" style="margin-top:10px">This will record the payment in Payments and reduce this card's outstanding balance once.</p>
+ <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:17px"><button class="btn secondary" onclick="closeModal()">Cancel</button><button class="btn" id="saveCardPay">Save Payment</button></div>`;
+ openModal("Record Credit Card Payment",body);
+ $("saveCardPay").onclick=()=>saveCardPayment(c.id);
+};
+window.saveCardPayment=async function(id){
+ const c=data.cards.find(x=>String(x.id)===String(id));if(!c)return;
+ const amount=Number($("cardPayAmount").value),paidOn=$("cardPayDate").value;
+ const outstanding=Number(c.outstanding||0);
+ if(!Number.isFinite(amount)||amount<=0){alert("Enter a payment amount greater than zero.");return;}
+ if(amount>outstanding){alert("Payment amount cannot exceed the current outstanding balance.");return;}
+ if(!paidOn){alert("Select the payment date.");return;}
+ const newOutstanding=Math.max(0,outstanding-amount);
+ const btn=$("saveCardPay");btn.disabled=true;btn.textContent="Saving...";
+ try{
+  const {error:updateError}=await client.from("credit_cards").update({outstanding:newOutstanding}).eq("id",c.id);
+  if(updateError)throw updateError;
+  const {error:paymentError}=await client.from("payments").insert({
+   bill_id:null,bill_name:"Credit card payment - "+c.card_name,
+   amount,paid_on:paidOn,payment_method:$("cardPayMethod").value,
+   reference:$("cardPayRef").value.trim()||null,
+   remarks:"Credit card payment recorded from Credit Cards section"
+  });
+  if(paymentError){
+   const {error:rollbackError}=await client.from("credit_cards").update({outstanding}).eq("id",c.id);
+   if(rollbackError)throw new Error("Payment history save failed and balance rollback also failed. Please check card balance and Payments before retrying. "+paymentError.message+"; "+rollbackError.message);
+   throw paymentError;
+  }
+  closeModal();await loadAll();notice("dataMsg","Credit card payment saved and outstanding balance updated.");
+ }catch(e){alert("Could not save card payment: "+e.message);const b=$("saveCardPay");if(b){b.disabled=false;b.textContent="Save Payment";}}
+};
+window.viewCardPayments=function(id){
+ const c=data.cards.find(x=>String(x.id)===String(id));if(!c)return;
+ const rows=data.payments.filter(p=>(p.bill_name||"")==="Credit card payment - "+c.card_name).sort((a,b)=>(b.paid_on||"").localeCompare(a.paid_on||"")).map(p=>`<tr><td>${dateFmt(p.paid_on)}</td><td>${money(p.amount)}</td><td>${esc(p.payment_method||"-")}</td><td>${esc(p.reference||"-")}</td></tr>`);
+ openModal(c.card_name+" — Payment History",rows.length?table(["Date","Amount","Method","Reference"],rows):'<div class="empty">No payments recorded for this card yet.</div>');
 }
 function renderEmi(){
  const rows=data.emi.map(e=>{
