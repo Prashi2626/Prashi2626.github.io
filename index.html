@@ -32,7 +32,7 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
   </div>
 </div>
 
-<div id="appView" class="app-shell hidden">
+<div id="appView" class="app-shell hidden"><div id="dataMsg" style="margin:12px 0"></div>
   <aside class="sidebar">
     <div class="brand">💰 MY FINANCE<small>Personal finance tracker</small></div>
     <div class="nav" id="sideNav">
@@ -60,17 +60,34 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
       <section id="tab-dashboard" class="section active">
         <div class="grid">
           <div class="card"><div class="metric-label">This month income</div><div class="metric" id="mIncome">₹0</div><div class="metric-note" id="mIncomeNote"></div></div>
-          <div class="card"><div class="metric-label">This month bills</div><div class="metric" id="mBills">₹0</div><div class="metric-note" id="mBillsNote"></div></div>
-          <div class="card"><div class="metric-label">Paid this month</div><div class="metric" id="mPaid">₹0</div><div class="metric-note" id="mPaidNote"></div></div>
-          <div class="card"><div class="metric-label">Pending</div><div class="metric" id="mPending">₹0</div><div class="metric-note" id="mPendingNote"></div></div>
+          <div class="card"><div class="metric-label">Paid bills this month</div><div class="metric" id="mPaid">₹0</div><div class="metric-note" id="mPaidNote"></div></div>
+          <div class="card"><div class="metric-label">Due bills this month</div><div class="metric" id="mPending">₹0</div><div class="metric-note" id="mPendingNote"></div></div>
+          <div class="card"><div class="metric-label">Expenses this month to date</div><div class="metric" id="mExpenses">₹0</div><div class="metric-note" id="mExpensesNote"></div></div>
+        </div>
+        <div style="height:14px"></div>
+        <div class="grid">
+          <div class="card"><div class="metric-label">EMIs paid this month</div><div class="metric" id="mEmiPaid">₹0</div><div class="metric-note" id="mEmiPaidNote"></div></div>
+          <div class="card"><div class="metric-label">Upcoming EMIs this month</div><div class="metric" id="mEmiUpcoming">₹0</div><div class="metric-note" id="mEmiUpcomingNote"></div></div>
+          <div class="card"><div class="metric-label">Room rent paid this month</div><div class="metric" id="mRentPaid">₹0</div><div class="metric-note" id="mRentPaidNote"></div></div>
+          <div class="card"><div class="metric-label">Room rent due</div><div class="metric" id="mRentDue">₹0</div><div class="metric-note" id="mRentDueNote"></div></div>
+        </div>
+        <div style="height:14px"></div>
+        <div class="grid">
+          <div class="card"><div class="metric-label">Credit cards</div><div class="metric" id="mCardCount">0</div><div class="metric-note">Cards tracked</div></div>
+          <div class="card"><div class="metric-label">Cards paid</div><div class="metric" id="mCardsPaid">0</div><div class="metric-note">Zero outstanding</div></div>
+          <div class="card"><div class="metric-label">Cards pending</div><div class="metric" id="mCardsPending">0</div><div class="metric-note" id="mCardsPendingNote">Current outstanding balance</div></div>
+          <div class="card"><div class="metric-label">Card outstanding</div><div class="metric" id="mCardOutstanding">₹0</div><div class="metric-note">Across all cards</div></div>
         </div>
         <div style="height:14px"></div>
         <div class="twocol">
-          <div class="card"><div class="toolbar"><h3>Due soon</h3><button class="btn secondary small" onclick="go('bills')">View all</button></div><div id="dueSoon"></div></div>
-          <div class="card"><div class="toolbar"><h3>Quick summary</h3></div><div id="quickSummary"></div></div>
+          <div class="card"><div class="toolbar"><h3>Due bills</h3><button class="btn secondary small" onclick="go('bills')">View bills</button></div><div id="dueSoon"></div><div style="margin-top:10px"><button class="btn secondary small" onclick="addRoomRent()">+ Add Room Rent Bill</button></div></div>
+          <div class="card"><div class="toolbar"><h3>Upcoming EMIs</h3><button class="btn secondary small" onclick="go('emi')">View EMIs</button></div><div id="upcomingEmiList"></div><div style="margin-top:10px"><button class="btn secondary small" onclick="go('payments');openForm('payment')">+ Record Bill Payment</button></div></div>
         </div>
         <div style="height:14px"></div>
-        <div class="card"><div class="toolbar"><h3>Monthly spending</h3><span class="muted">Last 6 months</span></div><div id="spendingChart"></div></div>
+        <div class="twocol">
+          <div class="card"><div class="toolbar"><h3>Quick summary</h3></div><div id="quickSummary"></div></div>
+          <div class="card"><div class="toolbar"><h3>Monthly spending</h3><span class="muted">Last 6 months</span></div><div id="spendingChart"></div></div>
+        </div>
       </section>
 
       <section id="tab-bills" class="section"><div class="card">
@@ -189,7 +206,7 @@ const schemas={
   ["card_name","Card name","text",true],["bank_name","Bank","text"],["card_number_last4","Last 4 digits","text"],["credit_limit","Credit limit","number"],["outstanding","Outstanding","number"],["statement_date","Statement date","date"],["due_date","Due date","date"]
  ]},
  emi:{title:"EMI",table:"emi_details",key:"emi",fields:[
-  ["bill_id","Linked bill","bill"],["loan_name","Loan name","text",true],["lender","Lender","text"],["emi_amount","EMI amount","number"],["total_emis","Total EMIs","number"],["paid_emis","Paid EMIs","number"],["next_due_date","Next due date","date"]
+  ["bill_id","Linked bill","bill"],["linked_card_id","Linked card","card"],["loan_name","Loan name","text",true],["lender","Lender","text"],["emi_amount","EMI amount","number"],["total_emis","Total EMIs","number"],["paid_emis","Paid EMIs","number"],["next_due_date","Next due date","date"]
  ]},
  reminder:{title:"Reminder",table:"reminders",key:"reminders",fields:[
   ["bill_id","Bill","bill"],["reminder_date","Reminder date","date"],["reminder_days_before","Days before","number"],["enabled","Enabled","checkbox"]
@@ -244,7 +261,14 @@ async function load(table,key){
  const {data:d,error}=await client.from(table).select("*").order("created_at",{ascending:false});
  if(error)throw error;data[key]=d||[];
 }
-async function loadAll(){await Promise.all([load("bills","bills"),load("payments","payments"),load("income","income"),load("expenses","expenses"),load("credit_cards","cards"),load("emi_details","emi"),load("reminders","reminders")]);if($("expenseDatePicker")&&!$("expenseDatePicker").value)$("expenseDatePicker").value=isoToday();renderAll()}
+async function loadAll(){
+ const jobs=[['bills','bills'],['payments','payments'],['income','income'],['expenses','expenses'],['credit_cards','cards'],['emi_details','emi'],['reminders','reminders']];
+ const errors=[];
+ await Promise.all(jobs.map(async ([table,key])=>{try{await load(table,key)}catch(e){errors.push(`${table}: ${e.message||e}`);data[key]=[]}}));
+ if($("expenseDatePicker")&&!$("expenseDatePicker").value)$("expenseDatePicker").value=isoToday();
+ renderAll();
+ if(errors.length) notice("dataMsg","Some data could not be loaded: "+errors.join(" | "),true); else notice("dataMsg","");
+}
 function handleError(e){
  const s=String(e?.message||e||"");
  if(s.toLowerCase().includes("jwt issued at future")){client.auth.signOut({scope:"local"});notice("loginMsg","Your saved session has a time problem. Check device date/time and sign in again.",true)}
@@ -253,37 +277,62 @@ function handleError(e){
 
 function billStatus(b){
  const paid=Number(b.paid_amount||0),amt=Number(b.amount||0);
- if(String(b.status||"").toLowerCase()==="paid"||paid>=amt&&amt>0)return "Paid";
- if(b.due_date && b.due_date<isoToday() && paid<amt)return "Overdue";
+ // The saved status can be stale. Amount paid is the source of truth so an old
+ // "Paid" label cannot make every bill appear paid when a balance remains.
+ if(amt>0 && paid>=amt)return "Paid";
+ if(b.due_date && b.due_date<isoToday() && Math.max(0,amt-paid)>0)return "Overdue";
  if(paid>0)return "Partial";
  return "Pending";
 }
 function renderAll(){renderDashboard();renderBills();renderPayments();renderExpenses();renderIncome();renderCards();renderEmi();renderReminders();renderReports();renderCalendar()}
 
 function renderDashboard(){
- const cur=ym(new Date());
- const todayExpense=data.expenses.filter(x=>x.expense_date===isoToday()).reduce((a,x)=>a+Number(x.amount||0),0);
- const monthExpense=data.expenses.filter(x=>(x.expense_date||"").startsWith(cur)).reduce((a,x)=>a+Number(x.amount||0),0);
- const inc=data.income.filter(x=>(x.received_on||"").startsWith(cur)).reduce((a,x)=>a+Number(x.amount||0),0);
- const bills=data.bills.filter(x=>(x.due_date||"").startsWith(cur)).reduce((a,x)=>a+Number(x.amount||0),0);
- const paid=data.payments.filter(x=>(x.paid_on||"").startsWith(cur)).reduce((a,x)=>a+Number(x.amount||0),0);
- const pending=data.bills.filter(x=>billStatus(x)!=="Paid").reduce((a,x)=>a+Math.max(0,Number(x.amount||0)-Number(x.paid_amount||0)),0);
- $("mIncome").textContent=money(inc);$("mBills").textContent=money(bills);$("mPaid").textContent=money(paid);$("mPending").textContent=money(pending);
- $("mIncomeNote").textContent=`${data.income.filter(x=>(x.received_on||"").startsWith(cur)).length} income entries`;
- $("mBillsNote").textContent=`${data.bills.filter(x=>(x.due_date||"").startsWith(cur)).length} bills due`;
- $("mPaidNote").textContent=`${data.payments.filter(x=>(x.paid_on||"").startsWith(cur)).length} payments`;
- $("mPendingNote").textContent=`${data.bills.filter(x=>billStatus(x)!=="Paid").length} unpaid bills`;
- const today=isoToday();
- const soon=data.bills.filter(x=>billStatus(x)!=="Paid"&&x.due_date&&x.due_date>=today).sort((a,b)=>a.due_date.localeCompare(b.due_date)).slice(0,6);
- $("dueSoon").innerHTML=soon.length?`<div class="mini-list">${soon.map(b=>`<div class="mini-item"><div><b>${esc(b.name)}</b><div class="muted">${dateFmt(b.due_date)} · ${esc(b.category||"Other")}</div></div><div style="text-align:right"><b>${money(Math.max(0,Number(b.amount||0)-Number(b.paid_amount||0)))}</b><div>${statusBadge(billStatus(b))}</div></div></div>`).join("")}</div>`:`<div class="empty">No upcoming unpaid bills 🎉</div>`;
+ const now=new Date(),cur=ym(now),today=isoToday();
+ const monthIncome=data.income.filter(x=>(x.received_on||"").startsWith(cur)&&(x.received_on||"")<=today);
+ const monthPayments=data.payments.filter(x=>(x.paid_on||"").startsWith(cur)&&(x.paid_on||"")<=today);
+ const monthExpenses=data.expenses.filter(x=>(x.expense_date||"").startsWith(cur)&&(x.expense_date||"")<=today);
+ const inc=monthIncome.reduce((a,x)=>a+Number(x.amount||0),0);
+ const billPayments=monthPayments.filter(x=>!String(x.remarks||"").startsWith("EMI installment"));
+ const paid=billPayments.reduce((a,x)=>a+Number(x.amount||0),0);
+ const expenseTotal=monthExpenses.reduce((a,x)=>a+Number(x.amount||0),0);
+ const monthBills=data.bills.filter(x=>(x.due_date||"").startsWith(cur));
+ const dueBills=monthBills.filter(x=>billStatus(x)!=="Paid");
+ const pending=dueBills.reduce((a,x)=>a+Math.max(0,Number(x.amount||0)-Number(x.paid_amount||0)),0);
+ $("mIncome").textContent=money(inc);$("mIncomeNote").textContent=`${monthIncome.length} income entries · through ${dateFmt(today)}`;
+ $("mPaid").textContent=money(paid);$("mPaidNote").textContent=`${billPayments.length} bill payment entries recorded this month`;
+ $("mPending").textContent=money(pending);$("mPendingNote").textContent=`${dueBills.length} unpaid bills due this month`;
+ $("mExpenses").textContent=money(expenseTotal);$("mExpensesNote").textContent=`${monthExpenses.length} expense entries · through ${dateFmt(today)}`;
+ // EMI payment history is counted from Payments records created by the EMI payment action.
+ const emiPayments=monthPayments.filter(x=>String(x.remarks||"").startsWith("EMI installment"));
+ const emiPaidTotal=emiPayments.reduce((a,x)=>a+Number(x.amount||0),0);
+ const monthEmis=data.emi.filter(e=>e.next_due_date&&(e.next_due_date||"").startsWith(cur)&&Number(e.paid_emis||0)<Number(e.total_emis||0));
+ const upcomingTotal=monthEmis.reduce((a,e)=>a+Number(e.emi_amount||0),0);
+ $("mEmiPaid").textContent=money(emiPaidTotal);$("mEmiPaidNote").textContent=`${emiPayments.length} EMI installments recorded paid this month`;
+ $("mEmiUpcoming").textContent=money(upcomingTotal);$("mEmiUpcomingNote").textContent=`${monthEmis.length} upcoming installments this month`;
+ const rentBills=data.bills.filter(b=>/rent/i.test(String(b.name||"")+" "+String(b.category||"")));
+ const rentPaid=billPayments.filter(p=>/rent/i.test(String(p.bill_name||"")+" "+String(data.bills.find(b=>String(b.id)===String(p.bill_id))?.name||""))).reduce((a,p)=>a+Number(p.amount||0),0);
+ const rentDue=rentBills.filter(b=>billStatus(b)!=="Paid").reduce((a,b)=>a+Math.max(0,Number(b.amount||0)-Number(b.paid_amount||0)),0);
+ $("mRentPaid").textContent=money(rentPaid);$("mRentPaidNote").textContent=`${rentBills.length} rent bill(s) tracked`;
+ $("mRentDue").textContent=money(rentDue);$("mRentDueNote").textContent=`${rentBills.filter(b=>billStatus(b)!=="Paid").length} rent bill(s) unpaid`;
+ const cardPaid=data.cards.filter(c=>Number(c.outstanding||0)<=0).length;
+ const cardPending=data.cards.filter(c=>Number(c.outstanding||0)>0).length;
+ const cardOutstanding=data.cards.reduce((sum,c)=>sum+Math.max(0,Number(c.outstanding||0)),0);
+ $("mCardCount").textContent=data.cards.length;$("mCardsPaid").textContent=cardPaid;$("mCardsPending").textContent=cardPending;
+ $("mCardsPendingNote").textContent=`${money(cardOutstanding)} outstanding on pending cards`;$("mCardOutstanding").textContent=money(cardOutstanding);
+ const soon=dueBills.filter(x=>x.due_date&&x.due_date>=today).sort((a,b)=>a.due_date.localeCompare(b.due_date)).slice(0,6);
+ $("dueSoon").innerHTML=soon.length?`<div class="mini-list">${soon.map(b=>`<div class="mini-item"><div><b>${esc(b.name)}</b><div class="muted">${dateFmt(b.due_date)} · ${esc(b.category||"Other")}</div></div><div style="text-align:right"><b>${money(Math.max(0,Number(b.amount||0)-Number(b.paid_amount||0)))}</b><div>${statusBadge(billStatus(b))}</div></div></div>`).join("")}</div>`:`<div class="empty">No upcoming unpaid bills this month.</div>`;
+ $("upcomingEmiList").innerHTML=monthEmis.length?`<div class="mini-list">${monthEmis.sort((a,b)=>(a.next_due_date||"").localeCompare(b.next_due_date||"")).map(e=>`<div class="mini-item"><div><b>${esc(e.loan_name||e.lender||"EMI")}</b><div class="muted">Due ${dateFmt(e.next_due_date)} · ${Number(e.paid_emis||0)}/${Number(e.total_emis||0)} paid</div></div><b>${money(e.emi_amount)}</b></div>`).join("")}</div>`:`<div class="empty">No upcoming EMIs this month.</div>`;
  $("quickSummary").innerHTML=`<div class="mini-list">
-  <div class="mini-item"><span class="muted">Credit cards</span><b>${data.cards.length}</b></div>
-  <div class="mini-item"><span class="muted">Active EMIs</span><b>${data.emi.length}</b></div>
-  <div class="mini-item"><span class="muted">Bills</span><b>${data.bills.length}</b></div>
-  <div class="mini-item"><span class="muted">Reminders</span><b>${data.reminders.filter(x=>x.enabled!==false).length}</b></div>
+  <div class="mini-item"><span class="muted">Bills due this month</span><b>${monthBills.length}</b></div>
+  <div class="mini-item"><span class="muted">Bill payments recorded this month</span><b>${billPayments.length}</b></div>
+  <div class="mini-item"><span class="muted">Daily expenses this month</span><b>${monthExpenses.length}</b></div>
+  <div class="mini-item"><span class="muted">Active EMIs</span><b>${data.emi.filter(e=>Number(e.total_emis||0)===0||Number(e.paid_emis||0)<Number(e.total_emis||0)).length}</b></div>
+  <div class="mini-item"><span class="muted">Reminders enabled</span><b>${data.reminders.filter(x=>x.enabled!==false).length}</b></div>
  </div>`;
  renderSpendingChart();
 }
+window.addRoomRent=function(){openForm("bill");const name=$("f_name"),category=$("f_category"),frequency=$("f_frequency"),due=$("f_due_date"),paidAmount=$("f_paid_amount"),status=$("f_status");if(name)name.value="Room Rent";if(category)category.value="Rent";if(frequency)frequency.value="Monthly";if(due)due.value=isoToday();if(paidAmount)paidAmount.value="0";if(status)status.value="Pending";};
+
 function statusBadge(s){const c=s==="Paid"?"good":s==="Overdue"?"bad":s==="Partial"?"warn":"neutral";return `<span class="badge ${c}">${esc(s)}</span>`}
 function renderSpendingChart(){
  const now=new Date(), months=[];
@@ -330,7 +379,37 @@ function renderIncome(){const rows=[...data.income].sort((a,b)=>(b.received_on||
 function renderCards(){
  $("cardsGrid").innerHTML=data.cards.length?data.cards.map(c=>{const limit=Number(c.credit_limit||0),used=Number(c.outstanding||0),pct=limit?Math.min(100,used/limit*100):0;return `<div class="card"><div class="row"><div><h3 style="margin:0">${esc(c.card_name)}</h3><div class="muted">${esc(c.bank_name||"")} ${c.card_number_last4?"•••• "+esc(c.card_number_last4):""}</div></div>${actionBtns("credit_cards",c.id)}</div><div style="height:18px"></div><div class="row"><div><div class="metric-label">Outstanding</div><div class="metric">${money(used)}</div></div><div style="text-align:right"><div class="metric-label">Limit</div><b>${money(limit)}</b></div></div><div style="height:10px"></div><div class="progress"><i style="width:${pct}%"></i></div><div class="row" style="margin-top:7px"><span class="muted">${pct.toFixed(0)}% used</span><span class="muted">Due ${dateFmt(c.due_date)}</span></div></div>`}).join(""):`<div class="card" style="grid-column:1/-1"><div class="empty">No credit cards yet. Add your first card.</div></div>`;
 }
-function renderEmi(){const rows=data.emi.map(e=>{const total=Number(e.total_emis||0),paid=Number(e.paid_emis||0),pct=total?Math.min(100,paid/total*100):0;return `<tr><td><b>${esc(e.loan_name||"-")}</b></td><td>${esc(e.lender||"-")}</td><td>${money(e.emi_amount)}</td><td>${paid}/${total||"-"} <div class="progress" style="margin-top:5px"><i style="width:${pct}%"></i></div></td><td>${dateFmt(e.next_due_date)}</td><td>${actionBtns("emi_details",e.id)}</td></tr>`});$("emiTable").innerHTML=table(["Loan","Lender","EMI","Progress","Next due",""],rows)}
+function renderEmi(){
+ const rows=data.emi.map(e=>{
+  const total=Number(e.total_emis||0),paid=Number(e.paid_emis||0),pct=total?Math.min(100,paid/total*100):0;
+  const b=data.bills.find(x=>String(x.id)===String(e.bill_id)),c=data.cards.find(x=>String(x.id)===String(e.linked_card_id));
+  const linked=b?b.name:(c?c.card_name:"-"),complete=total>0&&paid>=total;
+  const markButton=complete?'<span class="badge good">Completed</span>':`<button class="btn small" onclick="markEmiPaid('${esc(e.id)}')">Mark EMI Paid</button>`;
+  return `<tr><td><b>${esc(e.loan_name||"-")}</b></td><td>${esc(e.lender||"-")}</td><td>${esc(linked)}</td><td>${money(e.emi_amount)}</td><td>${paid}/${total||"-"} <div class="progress" style="margin-top:5px"><i style="width:${pct}%"></i></div></td><td>${dateFmt(e.next_due_date)}</td><td><div style="display:flex;gap:5px;flex-wrap:wrap">${markButton}${actionBtns("emi_details",e.id)}</div></td></tr>`;
+ });
+ $("emiTable").innerHTML=table(["Loan","Lender","Linked to","EMI","Progress","Next due","Actions"],rows);
+}
+function addMonthsToISO(value,months){
+ if(!value)return null;
+ const parts=value.split("-").map(Number);if(parts.length!==3||parts.some(Number.isNaN))return null;
+ const [y,m,d]=parts,target=new Date(y,m-1+months,1),last=new Date(target.getFullYear(),target.getMonth()+1,0).getDate();
+ target.setDate(Math.min(d,last));return isoDate(target);
+}
+window.markEmiPaid=async function(id){
+ const e=data.emi.find(x=>String(x.id)===String(id));if(!e)return;
+ const total=Number(e.total_emis||0),paid=Number(e.paid_emis||0);
+ if(total>0&&paid>=total){alert("All installments are already marked paid.");return;}
+ if(!confirm(`Mark this EMI installment paid?\n${e.loan_name||"EMI"} · ${money(e.emi_amount)}`))return;
+ const nextPaid=paid+1,complete=total>0&&nextPaid>=total;
+ const nextDue=complete?null:addMonthsToISO(e.next_due_date||isoToday(),1);
+ // Record the installment as a payment so dashboard totals and payment history can reflect it.
+ const paymentRow={bill_id:e.bill_id||null,bill_name:e.loan_name||e.lender||"EMI",amount:Number(e.emi_amount||0),paid_on:isoToday(),payment_method:"Auto-debit",remarks:`EMI installment ${nextPaid}/${total||"?"}`};
+ const {error:payError}=await client.from("payments").insert(paymentRow);
+ if(payError){alert("Could not record EMI payment: "+payError.message);return;}
+ const {error}=await client.from("emi_details").update({paid_emis:nextPaid,next_due_date:nextDue}).eq("id",e.id);
+ if(error){alert("Payment was recorded, but EMI progress could not be updated. Please edit the EMI progress manually before trying again. "+error.message);await loadAll();return;}
+ await loadAll();
+}
 function renderReminders(){const rows=data.reminders.map(r=>{const b=data.bills.find(x=>String(x.id)===String(r.bill_id));return `<tr><td>${esc(b?.name||"General")}</td><td>${dateFmt(r.reminder_date)}</td><td>${esc(r.reminder_days_before??"-")}</td><td>${r.enabled===false?statusBadge("Disabled"):statusBadge("Paid").replace("Paid","Enabled")}</td><td>${actionBtns("reminders",r.id)}</td></tr>`});$("reminderTable").innerHTML=table(["Bill","Reminder date","Days before","Status",""],rows)}
 
 function renderCalendar(){
@@ -356,6 +435,7 @@ function fieldHTML(f,val){
  const [name,label,type,required,opts]=f;
  if(type==="select")return `<label>${label}</label><select id="f_${name}">${opts.map(o=>`<option value="${esc(o)}" ${String(val??"")===o?"selected":""}>${esc(o)}</option>`).join("")}</select>`;
  if(type==="bill")return `<label>${label}</label><select id="f_${name}"><option value="">None</option>${data.bills.map(b=>`<option value="${esc(b.id)}" ${String(val??"")===String(b.id)?"selected":""}>${esc(b.name)}</option>`).join("")}</select>`;
+ if(type==="card")return `<label>${label}</label><select id="f_${name}"><option value="">None</option>${data.cards.map(c=>`<option value="${esc(c.id)}" ${String(val??"")===String(c.id)?"selected":""}>${esc(c.card_name)}${c.bank_name?" · "+esc(c.bank_name):""}</option>`).join("")}</select>`;
  if(type==="checkbox")return `<label class="check"><input id="f_${name}" type="checkbox" ${val!==false?"checked":""}> ${label}</label>`;
  return `<label>${label}</label>${type==="textarea"?`<textarea id="f_${name}">${esc(val??"")}</textarea>`:`<input id="f_${name}" type="${type}" value="${esc(val??"")}" ${required?"required":""}>`}`;
 }
@@ -374,6 +454,26 @@ async function saveForm(){
  const {kind,id}=editing,s=schemas[kind],obj={};
  for(const f of s.fields){const [n,,t]=f,el=$("f_"+n);obj[n]=t==="checkbox"?el.checked:(el.value===""?null:(t==="number"?Number(el.value):el.value))}
  if(kind==="payment"&&obj.bill_id){obj.bill_name=data.bills.find(b=>String(b.id)===String(obj.bill_id))?.name||null}
+ if(kind==="bill"){
+   const amt=Number(obj.amount||0),paid=Number(obj.paid_amount||0);
+   if(String(obj.status||"").toLowerCase()==="paid"&&amt>0)obj.paid_amount=amt;
+   else if(amt>0&&paid>=amt)obj.status="Paid";
+   else if(paid>0)obj.status="Partial";
+   else if(obj.due_date&&obj.due_date<isoToday())obj.status="Overdue";
+   else obj.status="Pending";
+ }
+ if(kind==="emi"){
+   if(!obj.bill_id && !obj.linked_card_id) { alert("Please select a linked bill or card."); return; }
+   if(obj.bill_id) obj.linked_card_id=null;
+   const previous=data.emi.find(x=>String(x.id)===String(id));
+   if(previous){
+     const added=Math.max(0,Number(obj.paid_emis||0)-Number(previous.paid_emis||0));
+     if(added>0&&obj.next_due_date===previous.next_due_date){
+       obj.next_due_date=addMonthsToISO(previous.next_due_date,added);
+     }
+   }
+   if(Number(obj.total_emis||0)>0&&Number(obj.paid_emis||0)>=Number(obj.total_emis||0))obj.next_due_date=null;
+ }
  try{
   let res;
   if(id)res=await client.from(s.table).update(obj).eq("id",id);
@@ -445,9 +545,9 @@ async function exportReportsExcel(){
     [24,20,10,16,16,14,16]);
 
   add("EMIs",
-    ["Loan Name","Lender","EMI Amount","Total EMIs","Paid EMIs","Next Due Date"],
-    data.emi.map(e=>[s(e.loan_name),s(e.lender),n(e.emi_amount),n(e.total_emis),n(e.paid_emis),s(e.next_due_date)]),
-    [24,20,16,14,14,16]);
+    ["Loan Name","Lender","Linked Bill","Linked Card","EMI Amount","Total EMIs","Paid EMIs","Next Due Date"],
+    data.emi.map(e=>[s(e.loan_name),s(e.lender),s(data.bills.find(b=>String(b.id)===String(e.bill_id))?.name),s(data.cards.find(c=>String(c.id)===String(e.linked_card_id))?.card_name),n(e.emi_amount),n(e.total_emis),n(e.paid_emis),s(e.next_due_date)]),
+    [24,20,24,24,16,14,14,16]);
 
   add("Reminders",
     ["Bill","Reminder Date","Days Before","Enabled"],
