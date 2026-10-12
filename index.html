@@ -112,7 +112,8 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
             <input id="quickExpenseDesc" placeholder="What did you spend on? e.g. Tiffin">
             <input id="quickExpenseAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Amount ₹">
             <select id="quickExpenseCategory"><option>Food</option><option>Groceries</option><option>Travel</option><option>Fuel</option><option>Shopping</option><option>Bills</option><option>Health</option><option>Other</option></select>
-            <select id="quickExpenseMethod"><option>UPI</option><option>Cash</option><option>Card</option><option>Bank transfer</option><option>Other</option></select>
+            <select id="quickExpenseMethod" onchange="toggleExpenseCardName()"><option>UPI</option><option>Cash</option><option>Card</option><option>Bank transfer</option><option>Other</option></select>
+            <input id="quickExpenseCardName" placeholder="Which card? e.g. Axis / RBL / HSBC" style="display:none" autocomplete="off">
             <button class="btn" onclick="quickAddExpense()">＋ Add</button>
           </div>
           <div class="muted" style="margin-top:9px">Date is selected above, so you don't need to enter it for every expense.</div>
@@ -201,7 +202,7 @@ const schemas={
   ["source","Source","text",true],["amount","Amount","number",true],["received_on","Received on","date"],["remarks","Remarks","textarea"]
  ]},
  expense:{title:"Expense",table:"expenses",key:"expenses",fields:[
-  ["expense_date","Date","date",true],["description","Expense","text",true],["category","Category","select",false,["Food","Groceries","Travel","Fuel","Shopping","Bills","Health","Other"]],["amount","Amount","number",true],["payment_method","Payment method","select",false,["UPI","Cash","Card","Bank transfer","Other"]],["notes","Notes","textarea"]
+  ["expense_date","Date","date",true],["description","Expense","text",true],["category","Category","select",false,["Food","Groceries","Travel","Fuel","Shopping","Bills","Health","Other"]],["amount","Amount","number",true],["payment_method","Payment method","select",false,["UPI","Cash","Card","Bank transfer","Other"]],["card_name","Card name (if Card)","text"],["notes","Notes","textarea"]
  ]},
  card:{title:"Credit Card",table:"credit_cards",key:"cards",fields:[
   ["card_name","Card name","text",true],["bank_name","Bank","text"],["card_number_last4","Last 4 digits","text"],["credit_limit","Credit limit","number"],["outstanding","Outstanding","number"],["statement_date","Statement date","date"],["due_date","Due date","date"]
@@ -363,20 +364,27 @@ function renderExpenses(){
  const otherTotal=monthTotal-upiTotal-cardTotal-cashTotal;
  $('expenseDateLabel').textContent=dateFmt(selected);$('expenseDayHeading').textContent=dateFmt(selected);$('eSelected').textContent=money(dayTotal);$('eMonth').textContent=money(monthTotal);$('eCount').textContent=dayItems.length;$('eAverage').textContent=money(dayItems.length?dayTotal/dayItems.length:0);
  $('eMethodUPI').textContent=money(upiTotal);$('eMethodCard').textContent=money(cardTotal);$('eMethodCash').textContent=money(cashTotal);$('eMethodOther').textContent=money(otherTotal);
- const rows=dayItems.map(x=>`<tr><td><b>${esc(x.description)}</b>${x.notes?`<div class="muted">${esc(x.notes)}</div>`:''}</td><td>${esc(x.category||'Other')}</td><td>${esc(x.payment_method||'-')}</td><td><b>${money(x.amount)}</b></td><td>${actionBtns('expenses',x.id)}</td></tr>`);
- $('expensesDayTable').innerHTML=rows.length?`<div class="tablewrap"><table class="table"><thead><tr><th>Expense</th><th>Category</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`:`<div class="empty">No expenses for ${dateFmt(selected)} yet. Add your first expense above.</div>`;
+ const rows=dayItems.map(x=>`<tr><td><b>${esc(x.description)}</b>${x.notes?`<div class="muted">${esc(x.notes)}</div>`:''}</td><td>${esc(x.category||'Other')}</td><td>${esc(x.payment_method||'-')}</td><td>${esc(x.card_name||'-')}</td><td><b>${money(x.amount)}</b></td><td>${actionBtns('expenses',x.id)}</td></tr>`);
+ $('expensesDayTable').innerHTML=rows.length?`<div class="tablewrap"><table class="table"><thead><tr><th>Expense</th><th>Category</th><th>Method</th><th>Card</th><th>Amount</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`:`<div class="empty">No expenses for ${dateFmt(selected)} yet. Add your first expense above.</div>`;
  const grouped={};monthItems.forEach(x=>{const k=x.expense_date||'';grouped[k]=(grouped[k]||0)+Number(x.amount||0)});
  const monthRows=Object.entries(grouped).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,total])=>`<tr class="month-day" onclick="selectExpenseDate('${date}')"><td><b>${dateFmt(date)}</b></td><td>${new Date(date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'short'})}</td><td><b>${money(total)}</b></td></tr>`);
  $('expenseMonthTable').innerHTML=monthRows.length?`<div class="tablewrap"><table class="table"><thead><tr><th>Date</th><th>Day</th><th>Total</th></tr></thead><tbody>${monthRows.join('')}</tbody></table></div>`:`<div class="empty">No expenses in ${monthName(d)} yet.</div>`;
 }
 function selectExpenseDate(date){$('expenseDatePicker').value=date;renderExpenses();}
 function changeExpenseDate(delta){const el=$('expenseDatePicker'),d=new Date((el.value||isoToday())+'T00:00:00');d.setDate(d.getDate()+delta);el.value=isoDate(d);renderExpenses();}
+function toggleExpenseCardName(){
+ const isCard=$('quickExpenseMethod').value==='Card',field=$('quickExpenseCardName');
+ field.style.display=isCard?'block':'none';
+ if(!isCard)field.value='';
+}
 async function quickAddExpense(){
  const desc=$('quickExpenseDesc').value.trim(), amount=Number($('quickExpenseAmount').value), date=$('expenseDatePicker').value||isoToday();
+ const method=$('quickExpenseMethod').value,cardName=$('quickExpenseCardName').value.trim();
  if(!desc||!amount||amount<=0){alert('Please enter an expense description and a valid amount.');return;}
- const obj={expense_date:date,description:desc,category:$('quickExpenseCategory').value,amount,payment_method:$('quickExpenseMethod').value};
+ if(method==='Card'&&!cardName){alert('Please enter which card you used (e.g. Axis, RBL, HSBC).');$('quickExpenseCardName').focus();return;}
+ const obj={expense_date:date,description:desc,category:$('quickExpenseCategory').value,amount,payment_method:method,card_name:method==='Card'?cardName:null};
  const {error}=await client.from('expenses').insert(obj);if(error){alert('Save failed: '+error.message);return;}
- $('quickExpenseDesc').value='';$('quickExpenseAmount').value='';await loadAll();$('quickExpenseDesc').focus();
+ $('quickExpenseDesc').value='';$('quickExpenseAmount').value='';$('quickExpenseCardName').value='';await loadAll();$('quickExpenseDesc').focus();
 }
 function openExpenseEdit(existing){openForm('expense',existing)}
 
@@ -547,7 +555,7 @@ function exportExpensesExcel(){
  const rows=data.expenses.slice().sort((a,b)=>(a.expense_date||"").localeCompare(b.expense_date||"")||String(a.created_at||"").localeCompare(String(b.created_at||"")));
  const wb=XLSX.utils.book_new();
  const add=(name,headers,body,widths)=>{const ws=XLSX.utils.aoa_to_sheet([headers,...body]);ws["!cols"]=widths.map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,ws,name);};
- add("All Expenses",["Date","Description","Category","Amount","Payment Method","Notes"],rows.map(x=>[s(x.expense_date),s(x.description),s(x.category||"Other"),n(x.amount),s(x.payment_method||"Other"),s(x.notes)]),[14,30,18,14,18,32]);
+ add("All Expenses",["Date","Description","Category","Amount","Payment Method","Card Name","Notes"],rows.map(x=>[s(x.expense_date),s(x.description),s(x.category||"Other"),n(x.amount),s(x.payment_method||"Other"),s(x.card_name),s(x.notes)]),[14,30,18,14,18,20,32]);
  const month=$("expenseDatePicker")?.value?.slice(0,7)||ym(new Date());
  const monthRows=rows.filter(x=>(x.expense_date||"").startsWith(month));
  const methods=["UPI","Card","Credit Card","Cash","Bank transfer","Other"];
