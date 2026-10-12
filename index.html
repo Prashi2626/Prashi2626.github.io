@@ -118,8 +118,9 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
           <div class="muted" style="margin-top:9px">Date is selected above, so you don't need to enter it for every expense.</div>
         </div>
         <div class="grid"><div class="card"><div class="metric-label">Selected day total</div><div class="metric" id="eSelected">₹0</div></div><div class="card"><div class="metric-label">This month</div><div class="metric" id="eMonth">₹0</div></div><div class="card"><div class="metric-label">Number of expenses</div><div class="metric" id="eCount">0</div></div><div class="card"><div class="metric-label">Average / expense</div><div class="metric" id="eAverage">₹0</div></div></div>
-        <div class="card"><div class="toolbar"><div><h3 id="expenseDayHeading">09 September 2026</h3><span class="muted">Expenses for the selected day</span></div></div><div id="expensesDayTable"></div></div>
-        <div class="card"><div class="toolbar"><div><h3>Month at a glance</h3><span class="muted">Day-wise totals for the selected month</span></div></div><div id="expenseMonthTable"></div></div>
+        <div class="grid"><div class="card"><div class="metric-label">UPI this month</div><div class="metric" id="eMethodUPI">₹0</div></div><div class="card"><div class="metric-label">Card this month</div><div class="metric" id="eMethodCard">₹0</div></div><div class="card"><div class="metric-label">Cash this month</div><div class="metric" id="eMethodCash">₹0</div></div><div class="card"><div class="metric-label">Other methods</div><div class="metric" id="eMethodOther">₹0</div></div></div>
+        <div class="card"><div class="toolbar"><div><h3 id="expenseDayHeading">09 September 2026</h3><span class="muted">Expenses for the selected day</span></div><button class="btn secondary" onclick="exportExpensesExcel()">⬇ Download Expenses Excel</button></div><div id="expensesDayTable"></div></div>
+        <div class="card"><div class="toolbar"><div><h3>Month at a glance</h3><span class="muted">Day-wise totals for the selected month</span></div><button class="btn secondary small" onclick="exportExpensesExcel()">⬇ Excel</button></div><div id="expenseMonthTable"></div></div>
       </div></section>
 
       <section id="tab-income" class="section"><div class="card">
@@ -357,7 +358,11 @@ function renderExpenses(){
  const dayItems=data.expenses.filter(x=>x.expense_date===selected).sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||'')));
  const monthItems=data.expenses.filter(x=>(x.expense_date||'').startsWith(cur));
  const dayTotal=dayItems.reduce((a,x)=>a+Number(x.amount||0),0), monthTotal=monthItems.reduce((a,x)=>a+Number(x.amount||0),0);
+ const methodTotal=(items,methods)=>items.filter(x=>methods.includes(String(x.payment_method||'').trim().toLowerCase())).reduce((a,x)=>a+Number(x.amount||0),0);
+ const upiTotal=methodTotal(monthItems,['upi']),cardTotal=methodTotal(monthItems,['card','credit card']),cashTotal=methodTotal(monthItems,['cash']);
+ const otherTotal=monthTotal-upiTotal-cardTotal-cashTotal;
  $('expenseDateLabel').textContent=dateFmt(selected);$('expenseDayHeading').textContent=dateFmt(selected);$('eSelected').textContent=money(dayTotal);$('eMonth').textContent=money(monthTotal);$('eCount').textContent=dayItems.length;$('eAverage').textContent=money(dayItems.length?dayTotal/dayItems.length:0);
+ $('eMethodUPI').textContent=money(upiTotal);$('eMethodCard').textContent=money(cardTotal);$('eMethodCash').textContent=money(cashTotal);$('eMethodOther').textContent=money(otherTotal);
  const rows=dayItems.map(x=>`<tr><td><b>${esc(x.description)}</b>${x.notes?`<div class="muted">${esc(x.notes)}</div>`:''}</td><td>${esc(x.category||'Other')}</td><td>${esc(x.payment_method||'-')}</td><td><b>${money(x.amount)}</b></td><td>${actionBtns('expenses',x.id)}</td></tr>`);
  $('expensesDayTable').innerHTML=rows.length?`<div class="tablewrap"><table class="table"><thead><tr><th>Expense</th><th>Category</th><th>Method</th><th>Amount</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`:`<div class="empty">No expenses for ${dateFmt(selected)} yet. Add your first expense above.</div>`;
  const grouped={};monthItems.forEach(x=>{const k=x.expense_date||'';grouped[k]=(grouped[k]||0)+Number(x.amount||0)});
@@ -536,6 +541,29 @@ async function updateBillAfterPayment(p){
  if(error)throw error;
 }
 
+function exportExpensesExcel(){
+ if(typeof XLSX==="undefined"){alert("Excel export library is still loading. Please try again.");return;}
+ const n=v=>Number(v||0),s=v=>(v===null||v===undefined)?"":v;
+ const rows=data.expenses.slice().sort((a,b)=>(a.expense_date||"").localeCompare(b.expense_date||"")||String(a.created_at||"").localeCompare(String(b.created_at||"")));
+ const wb=XLSX.utils.book_new();
+ const add=(name,headers,body,widths)=>{const ws=XLSX.utils.aoa_to_sheet([headers,...body]);ws["!cols"]=widths.map(w=>({wch:w}));XLSX.utils.book_append_sheet(wb,ws,name);};
+ add("All Expenses",["Date","Description","Category","Amount","Payment Method","Notes"],rows.map(x=>[s(x.expense_date),s(x.description),s(x.category||"Other"),n(x.amount),s(x.payment_method||"Other"),s(x.notes)]),[14,30,18,14,18,32]);
+ const month=$("expenseDatePicker")?.value?.slice(0,7)||ym(new Date());
+ const monthRows=rows.filter(x=>(x.expense_date||"").startsWith(month));
+ const methods=["UPI","Card","Credit Card","Cash","Bank transfer","Other"];
+ const normalized=x=>String(x.payment_method||"Other").trim().toLowerCase();
+ const methodSummary=[
+  ["UPI",monthRows.filter(x=>normalized(x)==="upi").reduce((a,x)=>a+n(x.amount),0)],
+  ["Card / Credit Card",monthRows.filter(x=>["card","credit card"].includes(normalized(x))).reduce((a,x)=>a+n(x.amount),0)],
+  ["Cash",monthRows.filter(x=>normalized(x)==="cash").reduce((a,x)=>a+n(x.amount),0)],
+  ["Bank transfer",monthRows.filter(x=>normalized(x)==="bank transfer").reduce((a,x)=>a+n(x.amount),0)],
+  ["Other",monthRows.filter(x=>!["upi","card","credit card","cash","bank transfer"].includes(normalized(x))).reduce((a,x)=>a+n(x.amount),0)]
+ ];
+ add("Payment Method Summary",["Month","Payment Method","Total Amount","Expense Count"],methodSummary.map(([method,total])=>[month,method,total,monthRows.filter(x=>method==="Card / Credit Card"?["card","credit card"].includes(normalized(x)):method==="Other"? !["upi","card","credit card","cash","bank transfer"].includes(normalized(x)):normalized(x)===method.toLowerCase()).length]),[14,24,18,16]);
+ const byDay={};monthRows.forEach(x=>{const d=x.expense_date||"";if(!byDay[d])byDay[d]={total:0,count:0};byDay[d].total+=n(x.amount);byDay[d].count++;});
+ add("Day-wise Totals",["Date","Total Expenses","Expense Count"],Object.entries(byDay).sort((a,b)=>a[0].localeCompare(b[0])).map(([d,v])=>[d,v.total,v.count]),[16,18,16]);
+ XLSX.writeFile(wb,`My_Daily_Expenses_${month}.xlsx`);
+}
 async function exportReportsExcel(){
   if(typeof XLSX==="undefined"){
     alert("Excel export library is still loading. Please try again.");
