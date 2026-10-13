@@ -58,18 +58,19 @@ button,input,select,textarea{font:inherit}button{cursor:pointer}
 
     <main class="content">
       <section id="tab-dashboard" class="section active">
+        <div class="card" style="margin-bottom:14px"><div class="toolbar"><div><h2>Dashboard as of date</h2><span class="muted">Choose a date to calculate income, payments, expenses and pending dues from the start of that month through the selected date.</span></div><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><label for="dashboardAsOfDate">As of</label><input id="dashboardAsOfDate" type="date" style="max-width:180px" onchange="renderDashboard()"><button class="btn secondary small" onclick="setDashboardToday()">Today</button></div></div></div>
         <div class="grid">
-          <div class="card"><div class="metric-label">This month income</div><div class="metric" id="mIncome">₹0</div><div class="metric-note" id="mIncomeNote"></div></div>
-          <div class="card"><div class="metric-label">Paid bills this month</div><div class="metric" id="mPaid">₹0</div><div class="metric-note" id="mPaidNote"></div></div>
-          <div class="card"><div class="metric-label">Due bills this month</div><div class="metric" id="mPending">₹0</div><div class="metric-note" id="mPendingNote"></div></div>
-          <div class="card"><div class="metric-label">Expenses this month to date</div><div class="metric" id="mExpenses">₹0</div><div class="metric-note" id="mExpensesNote"></div></div>
+          <div class="card"><div class="metric-label">Income through date</div><div class="metric" id="mIncome">₹0</div><div class="metric-note" id="mIncomeNote"></div></div>
+          <div class="card"><div class="metric-label">Bills paid through date</div><div class="metric" id="mPaid">₹0</div><div class="metric-note" id="mPaidNote"></div></div>
+          <div class="card"><div class="metric-label">Bills pending as of date</div><div class="metric" id="mPending">₹0</div><div class="metric-note" id="mPendingNote"></div></div>
+          <div class="card"><div class="metric-label">Expenses through date</div><div class="metric" id="mExpenses">₹0</div><div class="metric-note" id="mExpensesNote"></div></div>
         </div>
         <div style="height:14px"></div>
         <div class="grid">
-          <div class="card"><div class="metric-label">EMIs paid this month</div><div class="metric" id="mEmiPaid">₹0</div><div class="metric-note" id="mEmiPaidNote"></div></div>
+          <div class="card"><div class="metric-label">EMIs paid through date</div><div class="metric" id="mEmiPaid">₹0</div><div class="metric-note" id="mEmiPaidNote"></div></div>
           <div class="card"><div class="metric-label">Upcoming EMIs this month</div><div class="metric" id="mEmiUpcoming">₹0</div><div class="metric-note" id="mEmiUpcomingNote"></div></div>
-          <div class="card"><div class="metric-label">Room rent paid this month</div><div class="metric" id="mRentPaid">₹0</div><div class="metric-note" id="mRentPaidNote"></div></div>
-          <div class="card"><div class="metric-label">Room rent due</div><div class="metric" id="mRentDue">₹0</div><div class="metric-note" id="mRentDueNote"></div></div>
+          <div class="card"><div class="metric-label">Room rent paid through date</div><div class="metric" id="mRentPaid">₹0</div><div class="metric-note" id="mRentPaidNote"></div></div>
+          <div class="card"><div class="metric-label">Room rent pending</div><div class="metric" id="mRentDue">₹0</div><div class="metric-note" id="mRentDueNote"></div></div>
         </div>
         <div style="height:14px"></div>
         <div class="grid">
@@ -288,51 +289,60 @@ function billStatus(b){
 }
 function renderAll(){renderDashboard();renderBills();renderPayments();renderExpenses();renderIncome();renderCards();renderEmi();renderReminders();renderReports();renderCalendar()}
 
+function setDashboardToday(){const el=$("dashboardAsOfDate");if(el)el.value=isoToday();renderDashboard();}
 function renderDashboard(){
- const now=new Date(),cur=ym(now),today=isoToday();
- const monthIncome=data.income.filter(x=>(x.received_on||"").startsWith(cur)&&(x.received_on||"")<=today);
- const monthPayments=data.payments.filter(x=>(x.paid_on||"").startsWith(cur)&&(x.paid_on||"")<=today);
- const monthExpenses=data.expenses.filter(x=>(x.expense_date||"").startsWith(cur)&&(x.expense_date||"")<=today);
+ const picker=$("dashboardAsOfDate");
+ if(picker&&!picker.value)picker.value=isoToday();
+ const asOf=picker?.value||isoToday(), selectedDate=new Date(asOf+"T00:00:00"),cur=ym(selectedDate);
+ const monthStart=cur+"-01";
+ const through=(value)=>Boolean(value)&&value>=monthStart&&value<=asOf;
+ const monthIncome=data.income.filter(x=>through(x.received_on));
+ const monthPayments=data.payments.filter(x=>through(x.paid_on));
+ const monthExpenses=data.expenses.filter(x=>through(x.expense_date));
  const inc=monthIncome.reduce((a,x)=>a+Number(x.amount||0),0);
  const billPayments=monthPayments.filter(x=>!String(x.remarks||"").startsWith("EMI installment"));
  const paid=billPayments.reduce((a,x)=>a+Number(x.amount||0),0);
  const expenseTotal=monthExpenses.reduce((a,x)=>a+Number(x.amount||0),0);
  const monthBills=data.bills.filter(x=>(x.due_date||"").startsWith(cur));
- const dueBills=monthBills.filter(x=>billStatus(x)!=="Paid");
+ const dueBills=monthBills.filter(x=>(x.due_date||"")<=asOf&&billStatus(x)!=="Paid");
  const pending=dueBills.reduce((a,x)=>a+Math.max(0,Number(x.amount||0)-Number(x.paid_amount||0)),0);
- $("mIncome").textContent=money(inc);$("mIncomeNote").textContent=`${monthIncome.length} income entries · through ${dateFmt(today)}`;
- $("mPaid").textContent=money(paid);$("mPaidNote").textContent=`${billPayments.length} bill payment entries recorded this month`;
- $("mPending").textContent=money(pending);$("mPendingNote").textContent=`${dueBills.length} unpaid bills due this month`;
- $("mExpenses").textContent=money(expenseTotal);$("mExpensesNote").textContent=`${monthExpenses.length} expense entries · through ${dateFmt(today)}`;
- // EMI payment history is counted from Payments records created by the EMI payment action.
+ $("mIncome").textContent=money(inc);$("mIncomeNote").textContent=`${monthIncome.length} income entries · through ${dateFmt(asOf)}`;
+ $("mPaid").textContent=money(paid);$("mPaidNote").textContent=`${billPayments.length} bill payment entries recorded through ${dateFmt(asOf)}`;
+ $("mPending").textContent=money(pending);$("mPendingNote").textContent=`${dueBills.length} unpaid bill(s) due on or before ${dateFmt(asOf)}`;
+ $("mExpenses").textContent=money(expenseTotal);$("mExpensesNote").textContent=`${monthExpenses.length} expense entries · through ${dateFmt(asOf)}`;
+ // EMI payments use dated payment-history rows created by Mark EMI Paid.
  const emiPayments=monthPayments.filter(x=>String(x.remarks||"").startsWith("EMI installment"));
  const emiPaidTotal=emiPayments.reduce((a,x)=>a+Number(x.amount||0),0);
- const monthEmis=data.emi.filter(e=>e.next_due_date&&(e.next_due_date||"").startsWith(cur)&&Number(e.paid_emis||0)<Number(e.total_emis||0));
+ const monthEmis=data.emi.filter(e=>e.next_due_date&&(e.next_due_date||"").startsWith(cur)&&e.next_due_date>asOf&&Number(e.paid_emis||0)<Number(e.total_emis||0));
+ const emiDueAsOf=data.emi.filter(e=>e.next_due_date&&(e.next_due_date||"")<=asOf&&Number(e.paid_emis||0)<Number(e.total_emis||0));
+ const emiPendingTotal=emiDueAsOf.reduce((a,e)=>a+Number(e.emi_amount||0),0);
  const upcomingTotal=monthEmis.reduce((a,e)=>a+Number(e.emi_amount||0),0);
- $("mEmiPaid").textContent=money(emiPaidTotal);$("mEmiPaidNote").textContent=`${emiPayments.length} EMI installments recorded paid this month`;
- $("mEmiUpcoming").textContent=money(upcomingTotal);$("mEmiUpcomingNote").textContent=`${monthEmis.length} upcoming installments this month`;
- const rentBills=data.bills.filter(b=>/rent/i.test(String(b.name||"")+" "+String(b.category||"")));
+ $("mEmiPaid").textContent=money(emiPaidTotal);$("mEmiPaidNote").textContent=`${emiPayments.length} EMI installment(s) recorded through ${dateFmt(asOf)}`;
+ $("mEmiUpcoming").textContent=money(upcomingTotal);$("mEmiUpcomingNote").textContent=`${monthEmis.length} installment(s) due after ${dateFmt(asOf)} this month · ${money(emiPendingTotal)} due/overdue on or before selected date`;
+ const rentBills=data.bills.filter(b=>/rent/i.test(String(b.name||"")+" "+String(b.category||""))&&(b.due_date||"").startsWith(cur));
  const rentPaid=billPayments.filter(p=>/rent/i.test(String(p.bill_name||"")+" "+String(data.bills.find(b=>String(b.id)===String(p.bill_id))?.name||""))).reduce((a,p)=>a+Number(p.amount||0),0);
- const rentDue=rentBills.filter(b=>billStatus(b)!=="Paid").reduce((a,b)=>a+Math.max(0,Number(b.amount||0)-Number(b.paid_amount||0)),0);
- $("mRentPaid").textContent=money(rentPaid);$("mRentPaidNote").textContent=`${rentBills.length} rent bill(s) tracked`;
- $("mRentDue").textContent=money(rentDue);$("mRentDueNote").textContent=`${rentBills.filter(b=>billStatus(b)!=="Paid").length} rent bill(s) unpaid`;
+ const rentDue=rentBills.filter(b=>(b.due_date||"")<=asOf&&billStatus(b)!=="Paid").reduce((a,b)=>a+Math.max(0,Number(b.amount||0)-Number(b.paid_amount||0)),0);
+ $("mRentPaid").textContent=money(rentPaid);$("mRentPaidNote").textContent=`Rent payments recorded through ${dateFmt(asOf)}`;
+ $("mRentDue").textContent=money(rentDue);$("mRentDueNote").textContent=`${rentBills.filter(b=>(b.due_date||"")<=asOf&&billStatus(b)!=="Paid").length} rent bill(s) due on or before selected date`;
  const cardPaid=data.cards.filter(c=>Number(c.outstanding||0)<=0).length;
  const cardPending=data.cards.filter(c=>Number(c.outstanding||0)>0).length;
  const cardOutstanding=data.cards.reduce((sum,c)=>sum+Math.max(0,Number(c.outstanding||0)),0);
  $("mCardCount").textContent=data.cards.length;$("mCardsPaid").textContent=cardPaid;$("mCardsPending").textContent=cardPending;
- $("mCardsPendingNote").textContent=`${money(cardOutstanding)} outstanding on pending cards`;$("mCardOutstanding").textContent=money(cardOutstanding);
- const soon=dueBills.filter(x=>x.due_date&&x.due_date>=today).sort((a,b)=>a.due_date.localeCompare(b.due_date)).slice(0,6);
- $("dueSoon").innerHTML=soon.length?`<div class="mini-list">${soon.map(b=>`<div class="mini-item"><div><b>${esc(b.name)}</b><div class="muted">${dateFmt(b.due_date)} · ${esc(b.category||"Other")}</div></div><div style="text-align:right"><b>${money(Math.max(0,Number(b.amount||0)-Number(b.paid_amount||0)))}</b><div>${statusBadge(billStatus(b))}</div></div></div>`).join("")}</div>`:`<div class="empty">No upcoming unpaid bills this month.</div>`;
- $("upcomingEmiList").innerHTML=monthEmis.length?`<div class="mini-list">${monthEmis.sort((a,b)=>(a.next_due_date||"").localeCompare(b.next_due_date||"")).map(e=>`<div class="mini-item"><div><b>${esc(e.loan_name||e.lender||"EMI")}</b><div class="muted">Due ${dateFmt(e.next_due_date)} · ${Number(e.paid_emis||0)}/${Number(e.total_emis||0)} paid</div></div><b>${money(e.emi_amount)}</b></div>`).join("")}</div>`:`<div class="empty">No upcoming EMIs this month.</div>`;
+ $("mCardsPendingNote").textContent=`${money(cardOutstanding)} current outstanding balance; card balance history is not date-based`;$("mCardOutstanding").textContent=money(cardOutstanding);
+ const soon=monthBills.filter(x=>x.due_date&&x.due_date>=asOf&&billStatus(x)!=="Paid").sort((a,b)=>a.due_date.localeCompare(b.due_date)).slice(0,6);
+ $("dueSoon").innerHTML=soon.length?`<div class="mini-list">${soon.map(b=>`<div class="mini-item"><div><b>${esc(b.name)}</b><div class="muted">${dateFmt(b.due_date)} · ${esc(b.category||"Other")}</div></div><div style="text-align:right"><b>${money(Math.max(0,Number(b.amount||0)-Number(b.paid_amount||0)))}</b><div>${statusBadge(billStatus(b))}</div></div></div>`).join("")}</div>`:`<div class="empty">No unpaid bills due after the selected date this month.</div>`;
+ $("upcomingEmiList").innerHTML=monthEmis.length?`<div class="mini-list">${monthEmis.sort((a,b)=>(a.next_due_date||"").localeCompare(b.next_due_date||"")).map(e=>`<div class="mini-item"><div><b>${esc(e.loan_name||e.lender||"EMI")}</b><div class="muted">Due ${dateFmt(e.next_due_date)} · ${Number(e.paid_emis||0)}/${Number(e.total_emis||0)} paid</div></div><b>${money(e.emi_amount)}</b></div>`).join("")}</div>`:`<div class="empty">No upcoming EMIs after the selected date this month.</div>`;
  $("quickSummary").innerHTML=`<div class="mini-list">
-  <div class="mini-item"><span class="muted">Bills due this month</span><b>${monthBills.length}</b></div>
-  <div class="mini-item"><span class="muted">Bill payments recorded this month</span><b>${billPayments.length}</b></div>
-  <div class="mini-item"><span class="muted">Daily expenses this month</span><b>${monthExpenses.length}</b></div>
+  <div class="mini-item"><span class="muted">Bills due on/before selected date this month</span><b>${dueBills.length}</b></div>
+  <div class="mini-item"><span class="muted">Bill payments through selected date</span><b>${billPayments.length}</b></div>
+  <div class="mini-item"><span class="muted">Daily expenses through selected date</span><b>${monthExpenses.length}</b></div>
+  <div class="mini-item"><span class="muted">EMI due/overdue amount as of date</span><b>${money(emiPendingTotal)}</b></div>
   <div class="mini-item"><span class="muted">Active EMIs</span><b>${data.emi.filter(e=>Number(e.total_emis||0)===0||Number(e.paid_emis||0)<Number(e.total_emis||0)).length}</b></div>
   <div class="mini-item"><span class="muted">Reminders enabled</span><b>${data.reminders.filter(x=>x.enabled!==false).length}</b></div>
  </div>`;
  renderSpendingChart();
 }
+
 window.addRoomRent=function(){openForm("bill");const name=$("f_name"),category=$("f_category"),frequency=$("f_frequency"),due=$("f_due_date"),paidAmount=$("f_paid_amount"),status=$("f_status");if(name)name.value="Room Rent";if(category)category.value="Rent";if(frequency)frequency.value="Monthly";if(due)due.value=isoToday();if(paidAmount)paidAmount.value="0";if(status)status.value="Pending";};
 
 function statusBadge(s){const c=s==="Paid"?"good":s==="Overdue"?"bad":s==="Partial"?"warn":"neutral";return `<span class="badge ${c}">${esc(s)}</span>`}
